@@ -1,9 +1,13 @@
-using System.Reflection;
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Text.Json;
+using System.Timers; // The library for Timer
 using Silk.NET.Maths;
 using Silk.NET.SDL;
 using TheAdventure.Models;
 using TheAdventure.Models.Data;
+
 
 namespace TheAdventure
 {
@@ -11,37 +15,29 @@ namespace TheAdventure
     {
         private readonly Dictionary<int, GameObject> _gameObjects = new();
         private readonly Dictionary<string, TileSet> _loadedTileSets = new();
-
+        private readonly System.Timers.Timer _bombTimer; // Modify bombTimer as non-nullable and define it as readonly
+        private static readonly Random random = new Random(); // Define random as static readonly
         private Level? _currentLevel;
-        private PlayerObject _player;
-        private GameRenderer _renderer;
-        private Input _input;
-        private ScriptEngine _scriptEngine;
+        private PlayerObject? _player; // Define _player as nullable
+        private readonly GameRenderer _renderer;
+        private readonly Input _input;
 
         private DateTimeOffset _lastUpdate = DateTimeOffset.Now;
         private DateTimeOffset _lastPlayerUpdate = DateTimeOffset.Now;
+
         public Engine(GameRenderer renderer, Input input)
         {
+            _bombTimer = new System.Timers.Timer(2500); // _bombTimer initialization
+            _bombTimer.Elapsed += OnTimedEvent;
+            _bombTimer.AutoReset = true;
+            _bombTimer.Enabled = true;
+
             _renderer = renderer;
             _input = input;
-            _scriptEngine = new ScriptEngine();
-            _input.OnMouseClick += (_, coords) => AddBomb(coords.x, coords.y);
-        }
-
-        public void WriteToConsole(string message){
-            Console.WriteLine(message);
-        }
-
-        public (int x, int y) GetPlayerPosition(){
-            var pos = _player.Position;
-            return (pos.X, pos.Y);
         }
 
         public void InitializeWorld()
         {
-            var executableLocation = new FileInfo(Assembly.GetExecutingAssembly().Location);
-            _scriptEngine.LoadAll(Path.Combine(executableLocation.Directory.FullName, "Assets", "Scripts"));
-
             var jsonSerializerOptions = new JsonSerializerOptions() { PropertyNameCaseInsensitive = true };
             var levelContent = File.ReadAllText(Path.Combine("Assets", "terrain.tmj"));
 
@@ -53,29 +49,23 @@ namespace TheAdventure
                 if (!_loadedTileSets.TryGetValue(refTileSet.Source, out var tileSet))
                 {
                     tileSet = JsonSerializer.Deserialize<TileSet>(tileSetContent, jsonSerializerOptions);
-
-                    foreach (var tile in tileSet.Tiles)
+                    if (tileSet != null){
+                        foreach (var tile in tileSet.Tiles)
                     {
                         var internalTextureId = _renderer.LoadTexture(Path.Combine("Assets", tile.Image), out _);
                         tile.InternalTextureId = internalTextureId;
                     }
 
                     _loadedTileSets[refTileSet.Source] = tileSet;
+                    }
+                    
                 }
-
+                if (tileSet != null){
                 refTileSet.Set = tileSet;
+                }
             }
 
             _currentLevel = level;
-            /*SpriteSheet spriteSheet = new(_renderer, Path.Combine("Assets", "player.png"), 10, 6, 48, 48, new FrameOffset() { OffsetX = 24, OffsetY = 42 });
-            spriteSheet.Animations["IdleDown"] = new SpriteSheet.Animation()
-            {
-                StartFrame = new FramePosition(),//(0, 0),
-                EndFrame = new FramePosition() { Row = 0, Col = 5 },
-                DurationMs = 1000,
-                Loop = true
-            };
-            */
             var spriteSheet = SpriteSheet.LoadSpriteSheet("player.json", "Assets", _renderer);
             if(spriteSheet != null){
                 _player = new PlayerObject(spriteSheet, 100, 100);
@@ -97,45 +87,44 @@ namespace TheAdventure
             bool isAttacking = _input.IsKeyAPressed();
             bool addBomb = _input.IsKeyBPressed();
 
-            _scriptEngine.ExecuteAll(this);
-
-            if(isAttacking)
+            if(_player != null) // Verify if  _playeris not  null
             {
-                var dir = up ? 1: 0;
-                dir += down? 1 : 0;
-                dir += left? 1: 0;
-                dir += right ? 1 : 0;
-                if(dir <= 1){
-                    _player.Attack(up, down, left, right);
+                if(isAttacking)
+                {
+                    var dir = up ? 1: 0;
+                    dir += down? 1 : 0;
+                    dir += left? 1: 0;
+                    dir += right ? 1 : 0;
+                    if(dir <= 1){
+                        _player.Attack(up, down, left, right);
+                    }
+                    else{
+                        isAttacking = false;
+                    }
                 }
-                else{
-                    isAttacking = false;
+                if (!isAttacking && _currentLevel != null)
+                {
+                    _player.UpdatePlayerPosition(up ? 1.0 : 0.0, down ? 1.0 : 0.0, left ? 1.0 : 0.0, right ? 1.0 : 0.0,
+                        _currentLevel.Width * _currentLevel.TileWidth, _currentLevel.Height * _currentLevel.TileHeight,
+                        secsSinceLastFrame);
                 }
-            }
-            if(!isAttacking)
-            {
-                _player.UpdatePlayerPosition(up ? 1.0 : 0.0, down ? 1.0 : 0.0, left ? 1.0 : 0.0, right ? 1.0 : 0.0,
-                    _currentLevel.Width * _currentLevel.TileWidth, _currentLevel.Height * _currentLevel.TileHeight,
-                    secsSinceLastFrame);
             }
             var itemsToRemove = new List<int>();
             itemsToRemove.AddRange(GetAllTemporaryGameObjects().Where(gameObject => gameObject.IsExpired)
                 .Select(gameObject => gameObject.Id).ToList());
-
-            if (addBomb)
-            {
-                AddBomb(_player.Position.X, _player.Position.Y, false);
-            }
 
             foreach (var gameObjectId in itemsToRemove)
             {
                 var gameObject = _gameObjects[gameObjectId];
                 if(gameObject is TemporaryGameObject){
                     var tempObject = (TemporaryGameObject)gameObject;
-                    var deltaX = Math.Abs(_player.Position.X - tempObject.Position.X);
-                    var deltaY = Math.Abs(_player.Position.Y - tempObject.Position.Y);
-                    if(deltaX < 32 && deltaY < 32){
-                        _player.GameOver();
+                    if(_player != null) 
+                    {
+                        var deltaX = Math.Abs(_player.Position.X - tempObject.Position.X);
+                        var deltaY = Math.Abs(_player.Position.Y - tempObject.Position.Y);
+                        if(deltaX < 32 && deltaY < 32){
+                            _player.GameOver();
+                        }
                     }
                 }
                 _gameObjects.Remove(gameObjectId);
@@ -147,7 +136,10 @@ namespace TheAdventure
             _renderer.SetDrawColor(0, 0, 0, 255);
             _renderer.ClearScreen();
             
-            _renderer.CameraLookAt(_player.Position.X, _player.Position.Y);
+            if(_player != null) 
+            {
+                _renderer.CameraLookAt(_player.Position.X, _player.Position.Y);
+            }
 
             RenderTerrain();
             RenderAllObjects();
@@ -170,6 +162,35 @@ namespace TheAdventure
             }
 
             return null;
+        }
+
+        private void OnTimedEvent(object? source, ElapsedEventArgs e) // Modify the parameter source as nullable
+        {
+            if(source != null) // Verify that source in not null
+            {
+                int numberOfBombs = random.Next(2, 5); 
+                for (int i = 0; i < numberOfBombs; i++)
+                {
+                    PlaceRandomBomb();
+                }
+            }
+        }
+
+        private void PlaceRandomBomb()
+        {
+            if(_player != null) 
+            {
+                int characterX = _player.Position.X;
+                int characterY = _player.Position.Y;
+
+                int offsetX = random.Next(-50, 51); // Random offset between -50 and 50
+                int offsetY = random.Next(-50, 51); // Random offset between -50 and 50
+
+                int bombX = characterX + offsetX;
+                int bombY = characterY + offsetY;
+
+                AddBomb(bombX, bombY, false);
+            }
         }
 
         private void RenderTerrain()
@@ -226,12 +247,14 @@ namespace TheAdventure
                 gameObject.Render(_renderer);
             }
 
-            _player.Render(_renderer);
+            if (_player != null) 
+            {
+                _player.Render(_renderer);
+            }
         }
 
-        public void AddBomb(int x, int y, bool translateCoordinates = true)
+        private void AddBomb(int x, int y, bool translateCoordinates = true)
         {
-
             var translated = translateCoordinates ? _renderer.TranslateFromScreenToWorldCoordinates(x, y) : new Vector2D<int>(x, y);
             
             var spriteSheet = SpriteSheet.LoadSpriteSheet("bomb.json", "Assets", _renderer);
