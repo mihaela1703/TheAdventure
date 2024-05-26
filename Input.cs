@@ -4,13 +4,13 @@ namespace TheAdventure
 {
     public unsafe class Input
     {
-        private Sdl _sdl;
-        private GameWindow _gameWindow;
-        private GameRenderer _renderer;
+        private static Sdl _sdl;
+        private static GameWindow _gameWindow;
+        private static GameRenderer _renderer;
         
-        byte[] _mouseButtonStates = new byte[(int)MouseButton.Count];
+        static byte[] _mouseButtonStates = new byte[(int)MouseButton.Count];
         
-        public EventHandler<(int x, int y)> OnMouseClick;
+        public static EventHandler<(int x, int y)> OnMouseClick;
         
         public Input(Sdl sdl, GameWindow window, GameRenderer renderer)
         {
@@ -19,38 +19,50 @@ namespace TheAdventure
             _renderer = renderer;
         }
 
-        public bool IsKeyAPressed(){
+        public static bool IsKeyAPressed(){
             ReadOnlySpan<byte> _keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
             return _keyboardState[(int)KeyCode.A] == 1;
         }
 
-        public bool IsKeyBPressed(){
+        public static bool IsKeyBPressed(){
             ReadOnlySpan<byte> _keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
             return _keyboardState[(int)KeyCode.B] == 1;
         }
+        public static bool IsSpacePressed()
+        {
+            ReadOnlySpan<byte> _keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
+            return _keyboardState[(int)KeyCode.Space] == 1;
+        }
 
-        public bool IsLeftPressed()
+
+        public static bool IsLeftPressed()
         {
             ReadOnlySpan<byte> _keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
             return _keyboardState[(int)KeyCode.Left] == 1;
         }
         
-        public bool IsRightPressed()
+        public static bool IsRightPressed()
         {
             ReadOnlySpan<byte> _keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
             return _keyboardState[(int)KeyCode.Right] == 1;
         }
         
-        public bool IsUpPressed()
+        public static bool IsUpPressed()
         {
             ReadOnlySpan<byte> _keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
             return _keyboardState[(int)KeyCode.Up] == 1;
         }
         
-        public bool IsDownPressed()
+        public static bool IsDownPressed()
         {
             ReadOnlySpan<byte> _keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
             return _keyboardState[(int)KeyCode.Down] == 1;
+        }
+
+        public static bool IsSPressed()
+        {
+            ReadOnlySpan<byte> _keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
+            return _keyboardState[(int)KeyCode.S] == 1;
         }
         
         public bool ProcessInput()
