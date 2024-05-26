@@ -20,12 +20,13 @@ namespace TheAdventure
 
         private DateTimeOffset _lastUpdate = DateTimeOffset.Now;
         private DateTimeOffset _lastPlayerUpdate = DateTimeOffset.Now;
+        
         public Engine(GameRenderer renderer, Input input)
         {
             _renderer = renderer;
             _input = input;
             _scriptEngine = new ScriptEngine();
-            _input.OnMouseClick += (_, coords) => AddBomb(coords.x, coords.y);
+            Input.OnMouseClick += (_, coords) => AddBomb(coords.x, coords.y);
         }
 
         public void WriteToConsole(string message){
@@ -67,15 +68,6 @@ namespace TheAdventure
             }
 
             _currentLevel = level;
-            /*SpriteSheet spriteSheet = new(_renderer, Path.Combine("Assets", "player.png"), 10, 6, 48, 48, new FrameOffset() { OffsetX = 24, OffsetY = 42 });
-            spriteSheet.Animations["IdleDown"] = new SpriteSheet.Animation()
-            {
-                StartFrame = new FramePosition(),//(0, 0),
-                EndFrame = new FramePosition() { Row = 0, Col = 5 },
-                DurationMs = 1000,
-                Loop = true
-            };
-            */
             var spriteSheet = SpriteSheet.LoadSpriteSheet("player.json", "Assets", _renderer);
             if(spriteSheet != null){
                 _player = new PlayerObject(spriteSheet, 100, 100);
@@ -90,12 +82,12 @@ namespace TheAdventure
             var secsSinceLastFrame = (currentTime - _lastUpdate).TotalSeconds;
             _lastUpdate = currentTime;
 
-            bool up = _input.IsUpPressed();
-            bool down = _input.IsDownPressed();
-            bool left = _input.IsLeftPressed();
-            bool right = _input.IsRightPressed();
-            bool isAttacking = _input.IsKeyAPressed();
-            bool addBomb = _input.IsKeyBPressed();
+            bool up = Input.IsUpPressed();
+            bool down = Input.IsDownPressed();
+            bool left = Input.IsLeftPressed();
+            bool right = Input.IsRightPressed();
+            bool isAttacking = Input.IsKeyAPressed();
+            bool addBomb = Input.IsKeyBPressed();
 
             _scriptEngine.ExecuteAll(this);
 
@@ -114,9 +106,7 @@ namespace TheAdventure
             }
             if(!isAttacking)
             {
-                _player.UpdatePlayerPosition(up ? 1.0 : 0.0, down ? 1.0 : 0.0, left ? 1.0 : 0.0, right ? 1.0 : 0.0,
-                    _currentLevel.Width * _currentLevel.TileWidth, _currentLevel.Height * _currentLevel.TileHeight,
-                    secsSinceLastFrame);
+                _player.Move(up, down, left, right);
             }
             var itemsToRemove = new List<int>();
             itemsToRemove.AddRange(GetAllTemporaryGameObjects().Where(gameObject => gameObject.IsExpired)
@@ -231,7 +221,6 @@ namespace TheAdventure
 
         public void AddBomb(int x, int y, bool translateCoordinates = true)
         {
-
             var translated = translateCoordinates ? _renderer.TranslateFromScreenToWorldCoordinates(x, y) : new Vector2D<int>(x, y);
             
             var spriteSheet = SpriteSheet.LoadSpriteSheet("bomb.json", "Assets", _renderer);
